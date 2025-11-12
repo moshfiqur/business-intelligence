@@ -49,6 +49,7 @@ class ColumnDescriptor:
 
     column_name: str
     data_type: str
+    normalized_dtype: str
     semantic_category: str
     semantic_confidence: float | None
     sample_values: List[str]
@@ -57,6 +58,7 @@ class ColumnDescriptor:
         return {
             "column_name": self.column_name,
             "data_type": self.data_type,
+            "normalized_dtype": self.normalized_dtype,
             "semantic_category": self.semantic_category,
             "semantic_confidence": (
                 round(self.semantic_confidence, 4) if self.semantic_confidence is not None else ""
@@ -105,6 +107,7 @@ class ColumnSemanticsExtractor:
             descriptor = ColumnDescriptor(
                 column_name=column,
                 data_type=str(series.dtype),
+                normalized_dtype=self._normalize_dtype(series),
                 semantic_category=semantic_category,
                 semantic_confidence=confidence,
                 sample_values=sample_values,
@@ -162,6 +165,24 @@ class ColumnSemanticsExtractor:
 
         samples = (frequent + random_samples)[: self.sample_size]
         return [str(sample) for sample in samples]
+
+    def _normalize_dtype(self, series: pd.Series) -> str:
+        dtype = series.dtype
+        if pd.api.types.is_string_dtype(dtype) or pd.api.types.is_object_dtype(dtype):
+            return "string"
+        if pd.api.types.is_bool_dtype(dtype):
+            return "boolean"
+        if pd.api.types.is_integer_dtype(dtype):
+            return "integer"
+        if pd.api.types.is_float_dtype(dtype):
+            return "float"
+        if pd.api.types.is_datetime64_any_dtype(dtype):
+            return "datetime"
+        if pd.api.types.is_categorical_dtype(dtype):  # pragma: no cover - optional
+            return "categorical"
+        if pd.api.types.is_timedelta64_dtype(dtype):
+            return "timedelta"
+        return str(dtype)
 
     def _classify_semantic_category(
         self,
