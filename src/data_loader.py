@@ -23,13 +23,20 @@ class EnterpriseDataLoader:
         
         # Create data directory if it doesn't exist
         os.makedirs(data_dir, exist_ok=True)
-    
-    def load_kaggle_dataset(self, dataset_name: str, file_pattern: str = None) -> pd.DataFrame:
+
+    def load_kaggle_dataset(self, dataset_name: str, custom_filename: str = None, file_pattern: str = None) -> pd.DataFrame:
         """
-        Load dataset from Kaggle
+        Load dataset from Kaggle with custom filename support and download checks
         """
         try:
-            # Download dataset
+            # Create custom filename if provided
+            if custom_filename:
+                target_file = os.path.join(self.data_dir, custom_filename)
+                if os.path.exists(target_file):
+                    self.logger.info(f"File already exists: {target_file}")
+                    return pd.read_csv(target_file)
+            
+            # Download dataset only if no custom file exists or custom file doesn't exist
             self.kaggle_api.dataset_download_files(
                 dataset_name, 
                 path=self.data_dir, 
@@ -48,11 +55,17 @@ class EnterpriseDataLoader:
             
             # Load the first CSV file
             file_path = os.path.join(self.data_dir, csv_files[0])
+            
+            # Rename to custom filename if specified
+            if custom_filename and not os.path.exists(os.path.join(self.data_dir, custom_filename)):
+                new_file_path = os.path.join(self.data_dir, custom_filename)
+                os.rename(file_path, new_file_path)
+                file_path = new_file_path
+            
             df = pd.read_csv(file_path)
             
             self.logger.info(f"Loaded dataset {dataset_name} with shape {df.shape}")
             return df
-            
         except Exception as e:
             self.logger.error(f"Error loading Kaggle dataset {dataset_name}: {e}")
             raise
@@ -120,9 +133,10 @@ class EnterpriseDataLoader:
         
         return processed_df
     
+    
     def get_enterprise_datasets(self) -> Dict[str, pd.DataFrame]:
         """
-        Get multiple enterprise datasets for semantic analysis
+        Get multiple enterprise datasets for semantic analysis with custom file naming
         """
         datasets = {}
         
@@ -131,18 +145,18 @@ class EnterpriseDataLoader:
         datasets['sales_data'] = self.preprocess_data(self.load_sample_sales_data())
         datasets['finance_data'] = self.preprocess_data(self.load_sample_finance_data())
         
-        # Try to load real datasets from Kaggle if available
+        # Try to load real datasets from Kaggle if available with custom filenames
         kaggle_datasets = [
-            ('pavansubhasht/ibm-hr-analytics-attrition-dataset', 'hr_analytics'),
-            # ('rohanrao/sales-data-for-forecasting', 'sales_forecasting'),
-            # ('nelgiriyewithana/global-superstore-dataset', 'superstore_sales')
+            ('pavansubhasht/ibm-hr-analytics-attrition-dataset', 'hr_analytics', 'hr_employee_attrition.csv'),
+            # ('rohanrao/sales-data-for-forecasting', 'sales_forecasting', 'sales_forecasting_data.csv'),
+            # ('nelgiriyewithana/global-superstore-dataset', 'superstore_sales', 'global_superstore.csv')
         ]
         
-        for dataset_name, dataset_key in kaggle_datasets:
+        for dataset_name, dataset_key, custom_filename in kaggle_datasets:
             try:
-                df = self.load_kaggle_dataset(dataset_name)
+                df = self.load_kaggle_dataset(dataset_name, custom_filename)
                 datasets[dataset_key] = self.preprocess_data(df)
-                self.logger.info(f"Successfully loaded Kaggle dataset: {dataset_name}")
+                self.logger.info(f"Successfully loaded Kaggle dataset: {dataset_name} as {custom_filename}")
             except Exception as e:
                 self.logger.warning(f"Could not load Kaggle dataset {dataset_name}: {e}")
         
