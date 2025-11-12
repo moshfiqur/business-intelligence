@@ -5,7 +5,7 @@ Handles loading enterprise datasets from Kaggle
 
 import pandas as pd
 import os
-from typing import Dict, List
+from typing import Dict, List, Optional
 import logging
 from kaggle.api.kaggle_api_extended import KaggleApi
 
@@ -23,47 +23,40 @@ class EnterpriseDataLoader:
         # Create data directory if it doesn't exist
         os.makedirs(data_dir, exist_ok=True)
 
-    def load_kaggle_dataset(self, dataset_name: str, custom_filename: str = None) -> pd.DataFrame:
+    def load_kaggle_dataset(self, kaggle_ref: str, dataset_name: str) -> pd.DataFrame:
         """
-        Load dataset from Kaggle with custom filename support and download checks
+        Download a Kaggle dataset into a dataset-specific folder under data/ without renaming files.
         """
         try:
-            # Create custom filename if provided
-            if custom_filename:
-                target_file = os.path.join(self.data_dir, custom_filename)
-                if os.path.exists(target_file):
-                    self.logger.info(f"File already exists: {target_file}")
-                    return pd.read_csv(target_file)
+            # dataset-specific directory inside data/
+            dataset_path = os.path.join(self.data_dir, kaggle_ref)
+            os.makedirs(dataset_path, exist_ok=True)
+
+            # Check if any CSV already exists in the dataset folder; if not, download
+            existing_csvs = [f for f in os.listdir(dataset_path) if f.endswith('.csv')]
+            if not existing_csvs:
+                self.kaggle_api.dataset_download_files(
+                    kaggle_ref,
+                    path=dataset_path,
+                    unzip=True
+                )
             
-            # Download dataset only if no custom file exists
-            self.kaggle_api.dataset_download_files(
-                dataset_name, 
-                path=self.data_dir, 
-                unzip=True
-            )
-            
-            # Find the downloaded files
-            files = os.listdir(self.data_dir)
+            # Find CSV files within the dataset folder
+            files = os.listdir(dataset_path)
             csv_files = [f for f in files if f.endswith('.csv')]
             
             if not csv_files:
-                raise FileNotFoundError(f"No CSV files found in {self.data_dir}")
-            
-            # Load the first CSV file
-            file_path = os.path.join(self.data_dir, csv_files[0])
-            
-            # Rename to custom filename if specified
-            if custom_filename and not os.path.exists(os.path.join(self.data_dir, custom_filename)):
-                new_file_path = os.path.join(self.data_dir, custom_filename)
-                os.rename(file_path, new_file_path)
-                file_path = new_file_path
-            
+                raise FileNotFoundError(f"No CSV files found in {dataset_path}")
+
+            # Fallback to the first CSV if main_csv not specified
+            file_path = os.path.join(dataset_path, csv_files[0])
+
             df = pd.read_csv(file_path)
-            
-            self.logger.info(f"Loaded dataset {dataset_name} with shape {df.shape}")
+
+            self.logger.info(f"Loaded dataset {kaggle_ref} (folder: {dataset_name}) with shape {df.shape}")
             return df
         except Exception as e:
-            self.logger.error(f"Error loading Kaggle dataset {dataset_name}: {e}")
+            self.logger.error(f"Error loading Kaggle dataset {kaggle_ref}: {e}")
             raise
     
     def get_enterprise_datasets(self) -> Dict[str, pd.DataFrame]:
@@ -73,20 +66,23 @@ class EnterpriseDataLoader:
         """
         datasets = {}
         
-        # Kaggle datasets to download with custom filenames
+        # Kaggle datasets to download into dataset-specific folders
         kaggle_datasets = [
-            # ('pavansubhasht/ibm-hr-analytics-attrition-dataset', 'hr_analytics', 'hr_employee_attrition.csv'),
-            # ('aslanahmedov/walmart-sales-forecast', 'sales_forecasting', 'warlmart_sales_forecasting_data.csv'), # this dataset contains 4 files: features.csv, stores.csv, test.csv, train.csv
-            ('rohitsahoo/sales-forecasting', 'superstore_sales', 'global_superstore_sales_dataset.csv')
+            # (kaggle_ref, dataset_generic_name)
+            ('pavansubhasht/ibm-hr-analytics-attrition-dataset', 'hr_analytics'),
+            ('aslanahmedov/walmart-sales-forecast', 'sales_forecasting'),  # this dataset contains 4 files: features.csv, stores.csv, test.csv, train.csv
+            ('rohitsahoo/sales-forecasting', 'superstore_sales')
         ]
         
-        for dataset_name, dataset_key, custom_filename in kaggle_datasets:
+        for kaggle_ref, dataset_name in kaggle_datasets:
             try:
-                df = self.load_kaggle_dataset(dataset_name, custom_filename)
-                datasets[dataset_key] = df
-                self.logger.info(f"Successfully loaded Kaggle dataset: {dataset_name} as {custom_filename}")
+                df = self.load_kaggle_dataset(kaggle_ref, dataset_name)
+                datasets[dataset_name] = df
+                self.logger.info(
+                    f"Successfully loaded Kaggle dataset: {kaggle_ref} into folder '{dataset_name}'"
+                )
             except Exception as e:
-                self.logger.warning(f"Could not load Kaggle dataset {dataset_name}: {e}")
+                self.logger.warning(f"Could not load Kaggle dataset {kaggle_ref}: {e}")
         
         return datasets
 
