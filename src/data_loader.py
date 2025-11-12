@@ -5,7 +5,7 @@ Handles loading enterprise datasets from Kaggle
 
 import pandas as pd
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Tuple
 import logging
 from kaggle.api.kaggle_api_extended import KaggleApi
 
@@ -28,7 +28,7 @@ class EnterpriseDataLoader:
         Download a Kaggle dataset into a dataset-specific folder under data/ without renaming files.
         """
         try:
-            # dataset-specific directory inside data/
+            # dataset-specific directory inside data/, use kaggle_ref for folder naming
             dataset_path = os.path.join(self.data_dir, kaggle_ref)
             os.makedirs(dataset_path, exist_ok=True)
 
@@ -53,33 +53,28 @@ class EnterpriseDataLoader:
 
             df = pd.read_csv(file_path)
 
-            self.logger.info(f"Loaded dataset {kaggle_ref} (folder: {dataset_name}) with shape {df.shape}")
+            self.logger.info(f"Loaded dataset {kaggle_ref} into '{dataset_path}' with shape {df.shape}")
             return df
         except Exception as e:
             self.logger.error(f"Error loading Kaggle dataset {kaggle_ref}: {e}")
             raise
     
-    def get_enterprise_datasets(self) -> Dict[str, pd.DataFrame]:
+    def get_enterprise_datasets(self, kaggle_datasets: List[Tuple[str, str]]) -> Dict[str, pd.DataFrame]:
         """
-        Get multiple enterprise datasets from Kaggle
-        Downloads datasets and saves with custom filenames
+        Get multiple enterprise datasets from Kaggle.
+        Downloads into dataset-named folders without renaming files.
+
+        Parameters
+        - kaggle_datasets: list of tuples (kaggle_ref, dataset_name)
         """
         datasets = {}
-        
-        # Kaggle datasets to download into dataset-specific folders
-        kaggle_datasets = [
-            # (kaggle_ref, dataset_generic_name)
-            ('pavansubhasht/ibm-hr-analytics-attrition-dataset', 'hr_analytics'),
-            ('aslanahmedov/walmart-sales-forecast', 'sales_forecasting'),  # this dataset contains 4 files: features.csv, stores.csv, test.csv, train.csv
-            ('rohitsahoo/sales-forecasting', 'superstore_sales')
-        ]
         
         for kaggle_ref, dataset_name in kaggle_datasets:
             try:
                 df = self.load_kaggle_dataset(kaggle_ref, dataset_name)
                 datasets[dataset_name] = df
                 self.logger.info(
-                    f"Successfully loaded Kaggle dataset: {kaggle_ref} into folder '{dataset_name}'"
+                    f"Successfully loaded Kaggle dataset: {kaggle_ref} into folder '{os.path.join(self.data_dir, kaggle_ref)}'"
                 )
             except Exception as e:
                 self.logger.warning(f"Could not load Kaggle dataset {kaggle_ref}: {e}")
@@ -89,10 +84,17 @@ class EnterpriseDataLoader:
 # Example usage
 if __name__ == "__main__":
     loader = EnterpriseDataLoader()
-    
-    # Load datasets
-    datasets = loader.get_enterprise_datasets()
-    
+
+    # Provide datasets list explicitly
+    example_kaggle_datasets: List[Tuple[str, str]] = [
+        # (kaggle_ref, dataset_name)
+        ('pavansubhasht/ibm-hr-analytics-attrition-dataset', 'hr_analytics'),
+        ('aslanahmedov/walmart-sales-forecast', 'sales_forecasting'),
+        ('rohitsahoo/sales-forecasting', 'superstore_sales'),
+    ]
+
+    datasets = loader.get_enterprise_datasets(example_kaggle_datasets)
+
     print("Available datasets:")
     for name, df in datasets.items():
         print(f"  {name}: {df.shape}")
